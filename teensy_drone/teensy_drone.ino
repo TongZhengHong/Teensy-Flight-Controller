@@ -8,39 +8,58 @@
 #define QUADCOPTER
 //#define HEXCOPTER
 
-#define GYRO_ADDR 0x6B
-#define ACC_ADDR 0x1D
+#define HEADING_HOLD_MODE
+
+#define X_FLIP
+#define Y_FLIP
+//#define Z_FLIP
+
+#define DEBUG_GYRO
+#define DEBUG_ACCEL
+#define DEBUG_MAG
+
+#define DEBUG_LOOP_TIME
+#define DEBUG_PITCH_ROLL
+#define DEBUG_HEADING
+//#define DEBUG_TRANSMITTER
+#define DEBUG_PID_SETPOINT
+#define DEBUG_PID_OUTPUT
+
+#define MPU9250_ADDR 0x68
+#define AK8963_ADDR 0x0C
+#define BARO_ADDR 0x76
 
 //RF24 radio(9, 10); // CE, CSN
 //const byte address[6] = "00001";
 
 //* /////////////////////////////////////////////////////////////////////////////////////////////
-float pid_p_gain_roll = 0.4;  //Gain setting for the roll P-controller
-float pid_i_gain_roll = 0.00;  //Gain setting for the roll I-controller
-float pid_d_gain_roll = 0.3;    //G ain setting for the roll D-controller
-uint16_t pid_max_roll = 350;       //Maximum output of the PID-controller (+/-)
-uint16_t pid_max_i_roll = 100;     //Eliminate I controller windup
+float pid_p_gain_roll = 0.4;                    //Gain setting for the roll P-controller
+float pid_i_gain_roll = 0.00;                   //Gain setting for the roll I-controller
+float pid_d_gain_roll = 0.3;                    //Gain setting for the roll D-controller
+uint16_t pid_max_roll = 350;                    //Maximum output of the PID-controller (+/-)
+uint16_t pid_max_i_roll = 100;                  //Eliminate I controller windup
 
 #ifdef QUADCOPTER
-float pid_p_gain_pitch = pid_p_gain_roll; //Gain setting for the pitch P-controller.
-float pid_i_gain_pitch = pid_i_gain_roll; //Gain setting for the pitch I-controller.
-float pid_d_gain_pitch = pid_d_gain_roll; //Gain setting for the pitch D-controller.
-uint16_t pid_max_pitch = pid_max_roll;         //Maximum output of the PID-controller (+/-)
-uint16_t pid_max_i_pitch = pid_max_i_roll;     //Eliminate I controller windup
+float pid_p_gain_pitch = pid_p_gain_roll;       //Gain setting for the pitch P-controller.
+float pid_i_gain_pitch = pid_i_gain_roll;       //Gain setting for the pitch I-controller.
+float pid_d_gain_pitch = pid_d_gain_roll;       //Gain setting for the pitch D-controller.
+uint16_t pid_max_pitch = pid_max_roll;          //Maximum output of the PID-controller (+/-)
+uint16_t pid_max_i_pitch = pid_max_i_roll;      //Eliminate I controller windup
 #endif
 
 #ifdef HEXCOPTER
-float pid_p_gain_pitch = 0.0; //Gain setting for the pitch P-controller.
-float pid_i_gain_pitch = 0.0; //Gain setting for the pitch I-controller.
-float pid_d_gain_pitch = 0.0; //Gain setting for the pitch D-controller.
-uint16_t pid_max_pitch = pid_max_roll;         //Maximum output of the PID-controller (+/-)
-uint16_t pid_max_i_pitch = pid_max_i_roll;     //Eliminate I controller windup
+float pid_p_gain_pitch = 0.0;                   //Gain setting for the pitch P-controller.
+float pid_i_gain_pitch = 0.0;                   //Gain setting for the pitch I-controller.
+float pid_d_gain_pitch = 0.0;                   //Gain setting for the pitch D-controller.
+uint16_t pid_max_pitch = pid_max_roll;          //Maximum output of the PID-controller (+/-)
+uint16_t pid_max_i_pitch = pid_max_i_roll;      //Eliminate I controller windup
 #endif
 
-float pid_p_gain_yaw = 1.0;  //Gain setting for the pitch P-controller. //4.0
-float pid_i_gain_yaw = 0.0; //Gain setting for the pitch I-controller. //0.02
-float pid_d_gain_yaw = 0.0;  //Gain setting for the pitch D-controller.
-uint16_t pid_max_yaw = 400;       //Maximum output of the PID-controller (+/-)
+float pid_p_gain_yaw = 1.0;                     //Gain setting for the pitch P-controller. //4.0
+float pid_i_gain_yaw = 0.0;                     //Gain setting for the pitch I-controller. //0.02
+float pid_d_gain_yaw = 0.0;                     //Gain setting for the pitch D-controller.
+uint16_t pid_max_yaw = 400;                     //Maximum output of the PID-controller (+/-)
+float heading_hold_gain = 3.0;
 //* /////////////////////////////////////////////////////////////////////////////////////////////
 
 //Misc. variables
@@ -61,6 +80,7 @@ float acc_cal_roll, acc_cal_pitch;
 
 int16_t acc_x_raw, acc_y_raw, acc_z_raw;
 int16_t gyro_x_raw, gyro_y_raw, gyro_z_raw;
+int16_t temperature;
 
 int16_t acc_x_mem[16], acc_y_mem[16], acc_z_mem[16];
 int16_t gyro_x_mem[8], gyro_y_mem[8], gyro_z_mem[8];
@@ -76,6 +96,7 @@ float angle_roll_acc, angle_pitch_acc;
 float roll_level_adjust, pitch_level_adjust;
 
 //Compass variables
+float mag_sensitivity[3];
 int16_t mag_x_raw, mag_y_raw, mag_z_raw;
 float mag_x, mag_y, mag_z;
 float compass_x, compass_y, compass_heading;
@@ -103,6 +124,7 @@ void setup() {
   Wire.begin();
   Wire.setClock(400000);
   Serial.begin(115200);
+  Serial1.begin(9600);
   delay(2000);
 
   for (start = 0; start <= 74; start++)
@@ -144,25 +166,25 @@ void setup() {
   PORTC_PCR5 = (1 << 8);  //configuring LED pin as GPIO
   GPIOC_PDDR = (1 << 5);  //configuring LED pin as an output
   //GPIOC_PSOR = (1 << 5);  //setting LED pin high
-
+/*
   Serial.println("Welcome to flight controller setup!");
   Serial.println("Turn on your transmitter and place throttle at lowest position!");
-//  while (receiver_input_channel_3 < 990 || receiver_input_channel_3 > 1020 || receiver_input_channel_4 < 1400)  {
-//    receiver_input_channel_3 = convert_receiver_channel(3); //Convert the actual receiver signals for throttle to the standard 1000 - 2000us
-//    receiver_input_channel_4 = convert_receiver_channel(4); //Convert the actual receiver signals for yaw to the standard 1000 - 2000us
-//    start++;                                                //While waiting increment start whith every loop.
-//
-//    //    Serial.println(receiver_input_channel_3);
-//    //    Serial.println(receiver_input_channel_4);
-//    //    Serial.println();
-//
-//    pulse_esc();
-//    if (start == 125) {
-//      digitalWrite(13, !digitalRead(13));                   //Change the led status.
-//      start = 0;                                            //Start again at 0.
-//    }
-//  }
-//  start = 0;
+  while (receiver_input_channel_3 < 990 || receiver_input_channel_3 > 1020 || receiver_input_channel_4 < 1400)  {
+    receiver_input_channel_3 = convert_receiver_channel(3); //Convert the actual receiver signals for throttle to the standard 1000 - 2000us
+    receiver_input_channel_4 = convert_receiver_channel(4); //Convert the actual receiver signals for yaw to the standard 1000 - 2000us
+    start++;                                                //While waiting increment start whith every loop.
+
+    //    Serial.println(receiver_input_channel_3);
+    //    Serial.println(receiver_input_channel_4);
+    //    Serial.println();
+
+    pulse_esc();
+    if (start == 125) {
+      digitalWrite(13, !digitalRead(13));                   //Change the led status.
+      start = 0;                                            //Start again at 0.
+    }
+  }*/
+  start = 0;
   Serial.println("Transmitter detected!");
 
   delay(500);
@@ -171,6 +193,14 @@ void setup() {
   setup_sensor();
   calibrate_sensors();
   digitalWrite(13, LOW);
+
+  Serial.println("\nMagnetometer SCALES: ");
+  for (int i = 0; i < 3; i++) Serial.print((String) mag_cal[i * 2] + " ");
+  Serial.println();
+
+  Serial.println("Magnetometer OFFSETS: ");
+  for (int i = 0; i < 3; i++) Serial.print((String) mag_cal[i * 2 + 1] + " ");
+  Serial.println("\n");
 
   Serial.print("Connect your battery in: ");
   for (int i = 5; i > 0; i--) {
@@ -189,10 +219,10 @@ void setup() {
   delay(200);
   digitalWrite(13, LOW);
 
-//  radio.begin();
-//  radio.openWritingPipe(address);
-//  radio.setPALevel(RF24_PA_MIN);
-//  radio.stopListening();
+  //  radio.begin();
+  //  radio.openWritingPipe(address);
+  //  radio.setPALevel(RF24_PA_MIN);
+  //  radio.stopListening();
 }
 
 void loop() {
@@ -202,7 +232,9 @@ void loop() {
 
   calculate_pitch_roll();
 
-//  calculate_heading();
+  calculate_heading();
+
+  calculate_altitude();
 
   set_pid_offsets();
 
@@ -213,13 +245,12 @@ void loop() {
   set_escs();
 
   calculate_battery();
-//  radio.write(&roll, sizeof(roll));
+  //  radio.write(&roll, sizeof(roll));
 
   maintain_loop_time();
 }
 
 void check_start_stop() {
-  //Serial.println("Start value: " + (String) start);
   //For starting the motors: throttle low and yaw left (step 1).
   if (receiver_input_channel_3 < 1050 && receiver_input_channel_4 < 1050 && receiver_input_channel_1 > 1950 && receiver_input_channel_2 < 1050)  {
     if (start == 0) {
@@ -234,7 +265,7 @@ void check_start_stop() {
   if (receiver_input_channel_4 > 1450 && receiver_input_channel_1 < 1550 && receiver_input_channel_2 > 1450)  {
     if (start == 1)  {
       Serial.println("START MOTORS");
-      start = 2; //start motors
+      start = 2;                     //start motors
 
       angle_pitch = angle_pitch_acc; //Set the gyro pitch angle equal to the accelerometer pitch angle when the quadcopter is started.
       angle_roll = angle_roll_acc;   //Set the gyro roll angle equal to the accelerometer roll angle when the quadcopter is started.
@@ -258,7 +289,7 @@ void check_start_stop() {
 void calculate_battery() {
   float diodeForward = 0.4;
   float reading_error = -0.34;
-  float potDivider = 5.0244; // 1 / (82/(82+330))
+  float potDivider = 5.05625; // 1 / (0.8/(0.8+3.245))
 
   int sensorValue = analogRead(A14);
   float analog_voltage = sensorValue * (3.3 / 1024);
@@ -270,14 +301,19 @@ void pulse_esc() {
   GPIOD_PSOR |= 252;    //0000 0000 0000 0000 0000 0000 1111 1100 --> Setting pins 5,6,7,8,20,21 as HIGH
   delayMicroseconds(1000);
   GPIOD_PCOR |= 252;    //0000 0000 0000 0000 0000 0000 1111 1100 --> Setting pins 5,6,7,8,20,21 as LOW
-  delay(3);
+  delay(2);
 }
 
 void maintain_loop_time () {
   difference = micros() - main_loop_timer;
-  while (difference < 5000) {
+  
+#ifndef DEBUG_LOOP_TIME
+  Serial.println(difference);
+#endif
+
+  while (difference < 4000) {
     difference = micros() - main_loop_timer;
   }
-  //Serial.println(difference);
+  
   main_loop_timer = micros();
 }

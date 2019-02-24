@@ -34,8 +34,8 @@ void calculate_esc_output () {
       esc_6 += esc_6 * ((1680 - battery_voltage) / (float) 3500);            //Compensate the esc-6 pulse for voltage drop.
     }
 
-    //if (esc_1 < 1100) esc_1 = 1100;                                         //Keep the motors running.
-    //if (esc_2 < 1100) esc_2 = 1100;                                         //Keep the motors running.
+    if (esc_1 < 1100) esc_1 = 1100;                                         //Keep the motors running.
+    if (esc_2 < 1100) esc_2 = 1100;                                         //Keep the motors running.
     if (esc_3 < 1100) esc_3 = 1100;                                         //Keep the motors running.
     if (esc_4 < 1100) esc_4 = 1100;                                         //Keep the motors running.
     if (esc_5 < 1100) esc_5 = 1100;                                         //Keep the motors running.

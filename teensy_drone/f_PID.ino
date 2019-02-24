@@ -33,23 +33,27 @@ void set_pid_offsets() {
   //We need a little dead band of 16us for better results.
   if (receiver_input_channel_3 > 1050)  { //Do not yaw when turning off the motors.
     if (receiver_input_channel_4 > 1508) {
+      prev_heading = heading;
       pid_yaw_setpoint = (receiver_input_channel_4 - 1508) / 3.0;
-      //      prev_heading = heading;
+      heading_hold = false;
     } else if (receiver_input_channel_4 < 1492) {
+      prev_heading = heading;
       pid_yaw_setpoint = (receiver_input_channel_4 - 1492) / 3.0;
-      //      prev_heading = heading;
+      heading_hold = false;
+    } else {                                                            //Yaw stick at center --> No transmitter input
+      pid_yaw_setpoint = prev_heading;
+      heading_hold = true;
     }
-    //    else {
-    //      pid_yaw_setpoint = prev_heading;
-    //      heading_hold = true;
-    //    }
   }
-  //    Serial.print(pid_roll_setpoint);
-  //    Serial.print(" ");
-  //    Serial.print(pid_pitch_setpoint);
-  //    Serial.print(" ");
-  //    Serial.print(pid_yaw_setpoint);
-  //    Serial.println();
+
+#ifndef DEBUG_PID_SETPOINT
+  Serial.print(pid_roll_setpoint);
+  Serial.print(" ");
+  Serial.print(pid_pitch_setpoint);
+  Serial.print(" ");
+  Serial.print(pid_yaw_setpoint);
+  Serial.println();
+#endif
 }
 
 void calculate_pid() {
@@ -78,14 +82,16 @@ void calculate_pid() {
   pid_last_pitch_d_error = pid_error_temp;
 
   //* ========================================= Yaw calculations =========================================
-  //  if (heading_hold) {
-  //    float diff = heading - pid_yaw_setpoint;
-  //    if (diff > 180) pid_yaw_setpoint += 360;
-  //    else if (diff < -180) pid_yaw_setpoint -= 360;
-  //    pid_error_temp = (pid_yaw_setpoint - heading) * 2;
-  //    heading_hold = false;
-  //  } else pid_error_temp = gyro_yaw_input - pid_yaw_setpoint;
-  pid_error_temp = gyro_yaw_input - pid_yaw_setpoint;
+  if (heading_hold) {
+    float diff = heading - pid_yaw_setpoint;
+    if (diff > 180) pid_yaw_setpoint += 360;
+    else if (diff < -180) pid_yaw_setpoint -= 360;
+    pid_error_temp = pid_yaw_setpoint - heading;
+    if (abs(pid_error_temp) > 2) pid_error_temp *= heading_hold_gain;
+    heading_hold = false;
+  } else {
+    pid_error_temp = gyro_yaw_input - pid_yaw_setpoint;
+  }
 
   pid_i_mem_yaw += pid_i_gain_yaw * pid_error_temp;
   if (pid_i_mem_yaw > pid_max_yaw)pid_i_mem_yaw = pid_max_yaw;
@@ -97,9 +103,13 @@ void calculate_pid() {
 
   pid_last_yaw_d_error = pid_error_temp;
 
-//  Serial.print(" ");
-//  Serial.println(pid_output_roll);
-//  Serial.println(pid_output_pitch);
-//  Serial.println(pid_output_yaw);
-//  Serial.println();
+#ifndef DEBUG_PID_OUTPUT
+  Serial.print(" ");
+  Serial.print(pid_output_roll);
+  Serial.print(", ");
+  Serial.print(pid_output_pitch);
+  Serial.print(", ");
+  Serial.print(pid_output_yaw);
+  Serial.println();
+#endif
 }

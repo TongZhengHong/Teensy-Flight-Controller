@@ -1,6 +1,6 @@
 volatile int receiver_input[7];
 byte last_channel_1, last_channel_2, last_channel_3, last_channel_4, last_channel_5, last_channel_6;
-unsigned long timer_1, timer_2, timer_3, timer_4, timer_5, timer_6, current_time;
+uint32_t timer_1, timer_2, timer_3, timer_4, timer_5, timer_6, current_time;
 
 void convert_transmitter_values() {
   receiver_input_channel_1 = convert_receiver_channel(1); //Convert the actual receiver signals for pitch to the standard 1000 - 2000us.
@@ -8,14 +8,16 @@ void convert_transmitter_values() {
   receiver_input_channel_3 = convert_receiver_channel(3); //Convert the actual receiver signals for throttle to the standard 1000 - 2000us.
   receiver_input_channel_4 = convert_receiver_channel(4); //Convert the actual receiver signals for yaw to the standard 1000 - 2000us
 
-//  Serial.print(receiver_input_channel_1);
-//  Serial.print(", ");
-//  Serial.print(receiver_input_channel_2);
-//  Serial.print(", ");
-//  Serial.print(receiver_input_channel_3);
-//  Serial.print(", ");
-//  Serial.print(receiver_input_channel_4);
-//  Serial.println();
+#ifndef DEBUG_TRANSMITTER
+  Serial.print(receiver_input_channel_1);
+  Serial.print(", ");
+  Serial.print(receiver_input_channel_2);
+  Serial.print(", ");
+  Serial.print(receiver_input_channel_3);
+  Serial.print(", ");
+  Serial.print(receiver_input_channel_4);
+  Serial.println();
+#endif
 }
 
 int convert_receiver_channel(byte function) {
