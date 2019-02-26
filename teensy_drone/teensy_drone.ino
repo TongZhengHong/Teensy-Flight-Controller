@@ -1,9 +1,9 @@
+#include <SPI.h>
 #include <Wire.h>
 #include <EEPROM.h>
 
-//#include <SPI.h>
-//#include <nRF24L01.h>
-//#include <RF24.h>
+#include <nRF24L01.h>
+#include <RF24.h>
 
 #define QUADCOPTER
 //#define HEXCOPTER
@@ -17,11 +17,13 @@
 #define DEBUG_GYRO
 #define DEBUG_ACCEL
 #define DEBUG_MAG
+#define DEBUG_BARO
+#define DEBUG_GPS
 
-#define DEBUG_LOOP_TIME
+//#define DEBUG_LOOP_TIME
 #define DEBUG_PITCH_ROLL
 #define DEBUG_HEADING
-//#define DEBUG_TRANSMITTER
+#define DEBUG_TRANSMITTER
 #define DEBUG_PID_SETPOINT
 #define DEBUG_PID_OUTPUT
 
@@ -29,8 +31,8 @@
 #define AK8963_ADDR 0x0C
 #define BARO_ADDR 0x76
 
-//RF24 radio(9, 10); // CE, CSN
-//const byte address[6] = "00001";
+#define CE_PIN 9
+#define CSN_PIN 10
 
 //* /////////////////////////////////////////////////////////////////////////////////////////////
 float pid_p_gain_roll = 0.4;                    //Gain setting for the roll P-controller
@@ -113,6 +115,15 @@ float pid_i_mem_roll, pid_roll_setpoint, gyro_roll_input, pid_output_roll, pid_l
 float pid_i_mem_pitch, pid_pitch_setpoint, gyro_pitch_input, pid_output_pitch, pid_last_pitch_d_error;
 float pid_i_mem_yaw, pid_yaw_setpoint, gyro_yaw_input, pid_output_yaw, pid_last_yaw_d_error;
 
+//GPS variables
+
+//Telemetery variables
+RF24 radio(CE_PIN, CSN_PIN);
+const byte address[6] = "00001";
+
+uint8_t telemetry_loop_counter = 0;
+uint8_t telemetry_data;
+
 typedef union {
   float decimal;
   uint8_t bytes[4];
@@ -166,32 +177,34 @@ void setup() {
   PORTC_PCR5 = (1 << 8);  //configuring LED pin as GPIO
   GPIOC_PDDR = (1 << 5);  //configuring LED pin as an output
   //GPIOC_PSOR = (1 << 5);  //setting LED pin high
-/*
-  Serial.println("Welcome to flight controller setup!");
-  Serial.println("Turn on your transmitter and place throttle at lowest position!");
-  while (receiver_input_channel_3 < 990 || receiver_input_channel_3 > 1020 || receiver_input_channel_4 < 1400)  {
-    receiver_input_channel_3 = convert_receiver_channel(3); //Convert the actual receiver signals for throttle to the standard 1000 - 2000us
-    receiver_input_channel_4 = convert_receiver_channel(4); //Convert the actual receiver signals for yaw to the standard 1000 - 2000us
-    start++;                                                //While waiting increment start whith every loop.
+  /*
+    Serial.println("Welcome to flight controller setup!");
+    Serial.println("Turn on your transmitter and place throttle at lowest position!");
+    while (receiver_input_channel_3 < 990 || receiver_input_channel_3 > 1020 || receiver_input_channel_4 < 1400)  {
+      receiver_input_channel_3 = convert_receiver_channel(3); //Convert the actual receiver signals for throttle to the standard 1000 - 2000us
+      receiver_input_channel_4 = convert_receiver_channel(4); //Convert the actual receiver signals for yaw to the standard 1000 - 2000us
+      start++;                                                //While waiting increment start whith every loop.
 
-    //    Serial.println(receiver_input_channel_3);
-    //    Serial.println(receiver_input_channel_4);
-    //    Serial.println();
+      //    Serial.println(receiver_input_channel_3);
+      //    Serial.println(receiver_input_channel_4);
+      //    Serial.println();
 
-    pulse_esc();
-    if (start == 125) {
-      digitalWrite(13, !digitalRead(13));                   //Change the led status.
-      start = 0;                                            //Start again at 0.
-    }
-  }*/
+      pulse_esc();
+      if (start == 125) {
+        digitalWrite(13, !digitalRead(13));                   //Change the led status.
+        start = 0;                                            //Start again at 0.
+      }
+    }*/
   start = 0;
   Serial.println("Transmitter detected!");
 
   delay(500);
 
   digitalWrite(13, HIGH);
+  setup_gps();
   setup_sensor();
   calibrate_sensors();
+  initialise_telemetry();
   digitalWrite(13, LOW);
 
   Serial.println("\nMagnetometer SCALES: ");
@@ -218,11 +231,6 @@ void setup() {
   digitalWrite(13, HIGH);
   delay(200);
   digitalWrite(13, LOW);
-
-  //  radio.begin();
-  //  radio.openWritingPipe(address);
-  //  radio.setPALevel(RF24_PA_MIN);
-  //  radio.stopListening();
 }
 
 void loop() {
@@ -236,6 +244,8 @@ void loop() {
 
   calculate_altitude();
 
+  readGPS();
+
   set_pid_offsets();
 
   calculate_pid();
@@ -245,7 +255,8 @@ void loop() {
   set_escs();
 
   calculate_battery();
-  //  radio.write(&roll, sizeof(roll));
+
+  send_telemetry_data();
 
   maintain_loop_time();
 }
@@ -306,7 +317,7 @@ void pulse_esc() {
 
 void maintain_loop_time () {
   difference = micros() - main_loop_timer;
-  
+
 #ifndef DEBUG_LOOP_TIME
   Serial.println(difference);
 #endif
@@ -314,6 +325,6 @@ void maintain_loop_time () {
   while (difference < 4000) {
     difference = micros() - main_loop_timer;
   }
-  
+
   main_loop_timer = micros();
 }

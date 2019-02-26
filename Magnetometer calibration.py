@@ -16,7 +16,7 @@ line_y = [[0, 0], [-600, 600], [0, 0]]
 line_z = [[0, 0], [0, 0], [-600, 600]]
 
 FILE_PATH = "Users/zhenghong/Documents/UAV Project 2018/Teensy-Flight-Controller/"
-INPUT_FILE = "mag_output.txt"
+INPUT_FILE = "mag_output_outlier.txt"
 file = open(INPUT_FILE, "r")
 
 fig = plt.figure()
@@ -137,7 +137,7 @@ def compute_scales(points):
     return mag_scale
 
 def show_plot():
-    #ax.scatter(temp[0], temp[1], temp[2], c="g", marker=".")
+    ax.scatter(temp[0], temp[1], temp[2], c="g", marker=".")
     ax.scatter(original[0], original[1], original[2], c="r", marker=".")
     #ax.scatter(dest[0], dest[1], dest[2], c="b", marker=".")
     
@@ -158,7 +158,7 @@ def show_plot():
 def main():
     read_data()
     #find_average()
-    #compare_distances()
+    compare_distances()
     show_plot()
     
 main()

@@ -330,16 +330,6 @@ void setup_sensor() {
   Wire.write(B10000111);                                                 //Enable I2C and read 7 bytes
   Wire.endTransmission();
   delay(1);
-
-  //  Wire.beginTransmission(BARO_ADDR);
-  //  Wire.write(0xF5);
-  //  Wire.write();
-  //  Wire.endTransmission();
-  //
-  //  Wire.beginTransmission(BARO_ADDR);
-  //  Wire.write(0xF4);
-  //  Wire.write();
-  //  Wire.endTransmission();
 }
 
 void writeMagRegister(uint8_t subAddress, uint8_t data) {

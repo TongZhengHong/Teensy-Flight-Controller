@@ -1,4 +1,4 @@
-bool first_start = true;
+bool mag_first_start = true;
 float temp_heading;
 
 void calculate_heading() {
@@ -27,9 +27,6 @@ void calculate_heading() {
   float roll_angle = roll * DEG_TO_RAD;
   float pitch_angle = pitch * DEG_TO_RAD;
 
-//  Serial.print(pitch_angle);
-//  Serial.print(" ");
-
   compass_x = mag_y * cos(pitch_angle)
               - mag_z * sin(pitch_angle);
 
@@ -47,9 +44,9 @@ void calculate_heading() {
     compass_heading = 360 + compass_heading;
   }
 
-  if (first_start) {
+  if (mag_first_start) {
     angle_yaw = compass_heading;
-    first_start = false;
+    mag_first_start = false;
   }
 
   if (angle_yaw < 0) angle_yaw += 360;
