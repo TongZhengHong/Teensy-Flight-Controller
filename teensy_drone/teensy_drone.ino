@@ -5,10 +5,10 @@
 #include <nRF24L01.h>
 #include <RF24.h>
 
-#define QUADCOPTER
-//#define HEXCOPTER
+//#define QUADCOPTER
+#define HEXCOPTER
 
-#define HEADING_HOLD_MODE
+//#define HEADING_HOLD_MODE
 
 #define X_FLIP
 #define Y_FLIP
@@ -19,13 +19,17 @@
 #define DEBUG_MAG
 #define DEBUG_BARO
 #define DEBUG_GPS
+#define DEBUG_BATTERY
+//#define DEBUG_TELEMETRY
 
-//#define DEBUG_LOOP_TIME
+#define DEBUG_START
+#define DEBUG_LOOP_TIME
 #define DEBUG_PITCH_ROLL
 #define DEBUG_HEADING
 #define DEBUG_TRANSMITTER
 #define DEBUG_PID_SETPOINT
 #define DEBUG_PID_OUTPUT
+#define DEBUG_MOTOR
 
 #define MPU9250_ADDR 0x68
 #define AK8963_ADDR 0x0C
@@ -33,11 +37,12 @@
 
 #define CE_PIN 9
 #define CSN_PIN 10
+#define LOOP_TIME 4000
 
 //* /////////////////////////////////////////////////////////////////////////////////////////////
 float pid_p_gain_roll = 0.4;                    //Gain setting for the roll P-controller
-float pid_i_gain_roll = 0.00;                   //Gain setting for the roll I-controller
-float pid_d_gain_roll = 0.3;                    //Gain setting for the roll D-controller
+float pid_i_gain_roll = 0.005;                   //Gain setting for the roll I-controller
+float pid_d_gain_roll = 0.5;                    //Gain setting for the roll D-controller
 uint16_t pid_max_roll = 350;                    //Maximum output of the PID-controller (+/-)
 uint16_t pid_max_i_roll = 100;                  //Eliminate I controller windup
 
@@ -50,14 +55,14 @@ uint16_t pid_max_i_pitch = pid_max_i_roll;      //Eliminate I controller windup
 #endif
 
 #ifdef HEXCOPTER
-float pid_p_gain_pitch = 0.0;                   //Gain setting for the pitch P-controller.
-float pid_i_gain_pitch = 0.0;                   //Gain setting for the pitch I-controller.
-float pid_d_gain_pitch = 0.0;                   //Gain setting for the pitch D-controller.
+float pid_p_gain_pitch = pid_p_gain_roll;       //Gain setting for the pitch P-controller.
+float pid_i_gain_pitch = pid_i_gain_roll;       //Gain setting for the pitch I-controller.
+float pid_d_gain_pitch = pid_d_gain_roll;       //Gain setting for the pitch D-controller.
 uint16_t pid_max_pitch = pid_max_roll;          //Maximum output of the PID-controller (+/-)
 uint16_t pid_max_i_pitch = pid_max_i_roll;      //Eliminate I controller windup
 #endif
 
-float pid_p_gain_yaw = 1.0;                     //Gain setting for the pitch P-controller. //4.0
+float pid_p_gain_yaw = 0.7;                     //Gain setting for the pitch P-controller. //4.0
 float pid_i_gain_yaw = 0.0;                     //Gain setting for the pitch I-controller. //0.02
 float pid_d_gain_yaw = 0.0;                     //Gain setting for the pitch D-controller.
 uint16_t pid_max_yaw = 400;                     //Maximum output of the PID-controller (+/-)
@@ -67,9 +72,13 @@ float heading_hold_gain = 3.0;
 //Misc. variables
 uint8_t start;
 float voltage;
-uint16_t battery_voltage;
 uint32_t difference, main_loop_timer;
 byte eeprom_data[75];
+
+//Battery variables
+uint16_t battery_voltage;
+float battery_sum, battery_mem[32];
+uint8_t battery_counter;
 
 //Transmitter variables
 uint16_t receiver_input_channel_1 = 0, receiver_input_channel_2 = 0,
@@ -92,7 +101,7 @@ uint8_t gyro_loop_counter = 0, acc_loop_counter = 0;
 int32_t acc_x, acc_y, acc_z;
 float gyro_x, gyro_y, gyro_z;
 
-int16_t roll, pitch;
+int8_t roll, pitch;
 float angle_roll, angle_pitch, angle_yaw;
 float angle_roll_acc, angle_pitch_acc;
 float roll_level_adjust, pitch_level_adjust;
@@ -116,6 +125,7 @@ float pid_i_mem_pitch, pid_pitch_setpoint, gyro_pitch_input, pid_output_pitch, p
 float pid_i_mem_yaw, pid_yaw_setpoint, gyro_yaw_input, pid_output_yaw, pid_last_yaw_d_error;
 
 //GPS variables
+int32_t gps_lat, gps_lon;
 
 //Telemetery variables
 RF24 radio(CE_PIN, CSN_PIN);
@@ -123,6 +133,7 @@ const byte address[6] = "00001";
 
 uint8_t telemetry_loop_counter = 0;
 uint8_t telemetry_data;
+uint32_t telemetry_temp;
 
 typedef union {
   float decimal;
@@ -136,7 +147,6 @@ void setup() {
   Wire.setClock(400000);
   Serial.begin(115200);
   Serial1.begin(9600);
-  delay(2000);
 
   for (start = 0; start <= 74; start++)
     eeprom_data[start] = EEPROM.read(start);
@@ -177,24 +187,20 @@ void setup() {
   PORTC_PCR5 = (1 << 8);  //configuring LED pin as GPIO
   GPIOC_PDDR = (1 << 5);  //configuring LED pin as an output
   //GPIOC_PSOR = (1 << 5);  //setting LED pin high
-  /*
-    Serial.println("Welcome to flight controller setup!");
-    Serial.println("Turn on your transmitter and place throttle at lowest position!");
-    while (receiver_input_channel_3 < 990 || receiver_input_channel_3 > 1020 || receiver_input_channel_4 < 1400)  {
-      receiver_input_channel_3 = convert_receiver_channel(3); //Convert the actual receiver signals for throttle to the standard 1000 - 2000us
-      receiver_input_channel_4 = convert_receiver_channel(4); //Convert the actual receiver signals for yaw to the standard 1000 - 2000us
-      start++;                                                //While waiting increment start whith every loop.
 
-      //    Serial.println(receiver_input_channel_3);
-      //    Serial.println(receiver_input_channel_4);
-      //    Serial.println();
+  Serial.println("Welcome to flight controller setup!");
+  Serial.println("Turn on your transmitter and place throttle at lowest position!");
+  while (receiver_input_channel_3 < 990 || receiver_input_channel_3 > 1020 || receiver_input_channel_4 < 1400)  {
+    receiver_input_channel_3 = convert_receiver_channel(3); //Convert the actual receiver signals for throttle to the standard 1000 - 2000us
+    receiver_input_channel_4 = convert_receiver_channel(4); //Convert the actual receiver signals for yaw to the standard 1000 - 2000us
+    start++;                                                //While waiting increment start whith every loop.
 
-      pulse_esc();
-      if (start == 125) {
-        digitalWrite(13, !digitalRead(13));                   //Change the led status.
-        start = 0;                                            //Start again at 0.
-      }
-    }*/
+    pulse_esc();
+    if (start == 125) {
+      digitalWrite(13, !digitalRead(13));                   //Change the led status.
+      start = 0;                                            //Start again at 0.
+    }
+  }
   start = 0;
   Serial.println("Transmitter detected!");
 
@@ -222,15 +228,12 @@ void setup() {
     pulse_esc();
   }
   Serial.println();
-  calculate_battery();
+
+  int sensor_value = analogRead(A14);
+  float analog_voltage = sensor_value * (3.3 / 1024);
+  battery_voltage = 100 * ((analog_voltage + 0.6) * 5.05625 + 0.4);
   Serial.println("Battery left: " + (String) battery_voltage);
   Serial.println("Setup DONE!");
-
-  delay(1000);
-
-  digitalWrite(13, HIGH);
-  delay(200);
-  digitalWrite(13, LOW);
 }
 
 void loop() {
@@ -244,7 +247,7 @@ void loop() {
 
   calculate_altitude();
 
-  readGPS();
+  //readGPS();
 
   set_pid_offsets();
 
@@ -256,18 +259,23 @@ void loop() {
 
   calculate_battery();
 
+//  test_telemetry();
   send_telemetry_data();
 
   maintain_loop_time();
 }
 
 void check_start_stop() {
+#ifndef DEBUG_START
+  Serial.println(start);
+#endif
   //For starting the motors: throttle low and yaw left (step 1).
   if (receiver_input_channel_3 < 1050 && receiver_input_channel_4 < 1050 && receiver_input_channel_1 > 1950 && receiver_input_channel_2 < 1050)  {
     if (start == 0) {
       start = 1;
     }
     else if (start == 2) { //Stop motors --> check if already started
+      Serial.println("STOP MOTORS");
       start = 3;
     }
   }
@@ -291,7 +299,6 @@ void check_start_stop() {
       pid_last_yaw_d_error = 0;
     }
     else if (start == 3)    {
-      Serial.println("STOP MOTORS");
       start = 0; //Stop motors
     }
   }
@@ -299,13 +306,28 @@ void check_start_stop() {
 
 void calculate_battery() {
   float diodeForward = 0.4;
-  float reading_error = -0.34;
+  float calculation_error = 0.4;
   float potDivider = 5.05625; // 1 / (0.8/(0.8+3.245))
 
-  int sensorValue = analogRead(A14);
-  float analog_voltage = sensorValue * (3.3 / 1024);
-  voltage = voltage * 0.95 + analog_voltage * 0.05;
-  battery_voltage = 100 * ((voltage - reading_error) * potDivider + diodeForward);
+  int sensor_value = analogRead(A14);
+  float analog_voltage = sensor_value * (3.3 / 1024);
+
+//  battery_sum += analog_voltage;
+//  battery_sum -= battery_mem[battery_counter];
+//  battery_mem[battery_counter] = analog_voltage;
+//  float voltage = battery_sum / 32.0;
+//
+//  if (battery_counter == 31) battery_counter = 0;
+//  else battery_counter++;
+
+  voltage = 1.3452 * voltage - 0.2569;
+  float battery = 100 * ((voltage * potDivider) + diodeForward + calculation_error);
+  battery_voltage = battery_voltage * 0.95 + battery * 0.05;
+  battery_voltage = 1550;
+
+#ifndef DEBUG_BATTERY
+  Serial.println(battery_voltage);
+#endif
 }
 
 void pulse_esc() {
@@ -322,7 +344,7 @@ void maintain_loop_time () {
   Serial.println(difference);
 #endif
 
-  while (difference < 4000) {
+  while (difference < LOOP_TIME) {
     difference = micros() - main_loop_timer;
   }
 

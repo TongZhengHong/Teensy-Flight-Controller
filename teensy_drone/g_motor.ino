@@ -55,11 +55,25 @@ void calculate_esc_output () {
     esc_5 = 1000;                                                           //If start is not 2 keep a 1000us pulse for esc-5.
     esc_6 = 1000;                                                           //If start is not 2 keep a 1000us pulse for esc-6.
   }
+
+#ifndef DEBUG_MOTOR
+  Serial.print(esc_1);
+  Serial.print(", ");
+  Serial.print(esc_2);
+  Serial.print(", ");
+  Serial.print(esc_3);
+  Serial.print(", ");
+  Serial.print(esc_4);
+  Serial.print(", ");
+  Serial.print(esc_5);
+  Serial.print(", ");
+  Serial.println(esc_6);
+#endif
 }
 
 void set_escs() {
   loop_timer = micros();
-  
+
 #ifdef QUADCOPTER
   GPIOD_PSOR |= 180;    //0000 0000 0000 0000 0000 0000 1011 0100 --> Setting pins 7,6,5,20 as HIGH
 

@@ -33,16 +33,24 @@ void set_pid_offsets() {
   //We need a little dead band of 16us for better results.
   if (receiver_input_channel_3 > 1050)  { //Do not yaw when turning off the motors.
     if (receiver_input_channel_4 > 1508) {
-      prev_heading = heading;
       pid_yaw_setpoint = (receiver_input_channel_4 - 1508) / 3.0;
-      heading_hold = false;
-    } else if (receiver_input_channel_4 < 1492) {
+
+#ifdef HEADING_HOLD_MODE
       prev_heading = heading;
-      pid_yaw_setpoint = (receiver_input_channel_4 - 1492) / 3.0;
       heading_hold = false;
+#endif
+    } else if (receiver_input_channel_4 < 1492) {
+      pid_yaw_setpoint = (receiver_input_channel_4 - 1492) / 3.0;
+
+#ifdef HEADING_HOLD_MODE
+      prev_heading = heading;
+      heading_hold = false;
+#endif
     } else {                                                            //Yaw stick at center --> No transmitter input
+#ifdef HEADING_HOLD_MODE
       pid_yaw_setpoint = prev_heading;
       heading_hold = true;
+#endif
     }
   }
 
@@ -82,6 +90,7 @@ void calculate_pid() {
   pid_last_pitch_d_error = pid_error_temp;
 
   //* ========================================= Yaw calculations =========================================
+#ifdef HEADING_HOLD_MODE
   if (heading_hold) {
     float diff = heading - pid_yaw_setpoint;
     if (diff > 180) pid_yaw_setpoint += 360;
@@ -92,6 +101,10 @@ void calculate_pid() {
   } else {
     pid_error_temp = gyro_yaw_input - pid_yaw_setpoint;
   }
+#endif
+#ifndef HEADING_HOLD_MODE
+  pid_error_temp = gyro_yaw_input - pid_yaw_setpoint;
+#endif
 
   pid_i_mem_yaw += pid_i_gain_yaw * pid_error_temp;
   if (pid_i_mem_yaw > pid_max_yaw)pid_i_mem_yaw = pid_max_yaw;

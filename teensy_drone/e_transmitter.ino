@@ -1,5 +1,5 @@
-volatile int receiver_input[7];
-byte last_channel_1, last_channel_2, last_channel_3, last_channel_4, last_channel_5, last_channel_6;
+volatile uint16_t receiver_input[7];
+uint8_t last_channel_1, last_channel_2, last_channel_3, last_channel_4, last_channel_5, last_channel_6;
 uint32_t timer_1, timer_2, timer_3, timer_4, timer_5, timer_6, current_time;
 
 void convert_transmitter_values() {
