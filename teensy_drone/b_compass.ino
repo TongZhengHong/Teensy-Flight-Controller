@@ -34,16 +34,11 @@ void calculate_heading() {
               + mag_y * sin(pitch_angle) * sin(roll_angle)
               + mag_z * cos(pitch_angle) * sin(roll_angle);
 
-//  if (compass_x == 0) {
-//    if (compass_y < 0) compass_heading = 90;
-//    else compass_heading = 0;
-//  } else compass_heading = atan2(compass_y, compass_x) * RAD_TO_DEG;
-
   compass_heading = atan2(compass_y, compass_x) * RAD_TO_DEG;
-  if (compass_heading < 0) {
-    compass_heading = 360 + compass_heading;
-  }
+  if (compass_heading < 0) compass_heading += 360;
+  else if (compass_heading >= 360) compass_heading -= 360;
 
+  //Initialise angle_yaw to actual heading of drone
   if (mag_first_start) {
     angle_yaw = compass_heading;
     mag_first_start = false;
@@ -58,6 +53,8 @@ void calculate_heading() {
     angle_yaw = angle_yaw * 0.94 + compass_heading * 0.06;
   }
 
+  heading = angle_yaw;
+  
 #ifndef DEBUG_MAG
   Serial.print(mag_x);
   Serial.print(",");
@@ -65,11 +62,10 @@ void calculate_heading() {
   Serial.print(",");
   Serial.println(mag_z);
 #endif
-
-  heading = angle_yaw;
+  
 #ifndef DEBUG_HEADING
-  Serial.print((uint16_t) compass_heading);
+  Serial.print((uint16_t) compass_heading);     //Heading just from compass
   Serial.print(", ");
-  Serial.println((uint16_t) heading);
+  Serial.println((uint16_t) heading);           //Fused heading from compass and gyroscope
 #endif
 }

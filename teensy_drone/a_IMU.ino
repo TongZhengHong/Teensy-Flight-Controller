@@ -60,7 +60,7 @@ void calibrate_accel() {
   Wire.beginTransmission(MPU9250_ADDR);                                   //Start communication with the gyro.
   Wire.write(0x3B);                                                       //Start reading @ register 43h and auto increment with every read.
   Wire.endTransmission();                                                 //End the transmission.
-  Wire.requestFrom(MPU9250_ADDR, 14);                                      //Request 6 bytes from the gyro.
+  Wire.requestFrom(MPU9250_ADDR, 14);                                      //Request 14 bytes from the gyro.
 
   while (Wire.available() < 14);
   acc_x_raw = (int16_t) Wire.read() << 8 | (int16_t) Wire.read();
@@ -178,6 +178,10 @@ void calculate_pitch_roll() {
   angle_roll += gyro_x * 0.0000610687;
   angle_pitch += gyro_y * 0.0000610687;
   angle_yaw += gyro_z * 0.0000610687;
+
+  //0.00000107 = 0.0000610687 * (3.142(PI) / 180degr)
+//  angle_pitch -= angle_roll * sin(gyro_z * 0.00000107);                  //If the IMU has yawed transfer the roll angle to the pitch angel.
+//  angle_roll += angle_pitch * sin(gyro_z * 0.00000107);                  //If the IMU has yawed transfer the pitch angle to the roll angel.
 
   //Accelerometer angle calculations
   angle_roll_acc = (float) (atan2(acc_y, acc_z)) * RAD_TO_DEG;

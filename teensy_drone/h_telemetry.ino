@@ -2,9 +2,10 @@ uint8_t check_byte;
 
 void initialise_telemetry() {
   radio.begin();
+  radio.setChannel(RADIO_CHANNEL);
   radio.setPayloadSize(sizeof(telemetry_data));
   radio.setRetries(0, 0);
-  //radio.setAutoAck(false); --> Test!!!
+  radio.setAutoAck(false); //--> Test!!!
   radio.openWritingPipe(address);
   radio.setPALevel(RF24_PA_LOW);
   radio.setDataRate(RF24_1MBPS);
@@ -53,25 +54,28 @@ void send_telemetry_data() {
   if (telemetry_loop_counter == 13) telemetry_data = telemetry_temp >> 16;
   if (telemetry_loop_counter == 14) telemetry_data = telemetry_temp >> 24;
 
-  // Send transmitter values ==========================================================================================
+  // Send transmitter 1 ==========================================================================================
   else if (telemetry_loop_counter == 15) {
     telemetry_temp = receiver_input_channel_1;
     telemetry_data = telemetry_temp;
   }
   else if (telemetry_loop_counter == 16) telemetry_data = telemetry_temp >> 8;
 
+  // Send transmitter 2 ==========================================================================================
   else if (telemetry_loop_counter == 17) {
     telemetry_temp = receiver_input_channel_2;
     telemetry_data = telemetry_temp;
   }
   else if (telemetry_loop_counter == 18) telemetry_data = telemetry_temp >> 8;
 
+  // Send transmitter 3 ==========================================================================================
   else if (telemetry_loop_counter == 19) {
     telemetry_temp = receiver_input_channel_3;
     telemetry_data = telemetry_temp;
   }
   else if (telemetry_loop_counter == 20) telemetry_data = telemetry_temp >> 8;
 
+  // Send transmitter 4 ==========================================================================================
   else if (telemetry_loop_counter == 21) {
     telemetry_temp = receiver_input_channel_4;
     telemetry_data = telemetry_temp;
@@ -85,17 +89,30 @@ void send_telemetry_data() {
   }
   else if (telemetry_loop_counter == 24) telemetry_data = telemetry_temp >> 8;
 
+  //Send PID gains
+  else if (telemetry_loop_counter == 25) telemetry_data = pid_p_gain_roll * 10;
+  else if (telemetry_loop_counter == 26) telemetry_data = pid_i_gain_roll * 1000;
+  else if (telemetry_loop_counter == 27) telemetry_data = pid_d_gain_roll * 10;
+
+  else if (telemetry_loop_counter == 28) telemetry_data = pid_p_gain_pitch * 10;
+  else if (telemetry_loop_counter == 29) telemetry_data = pid_i_gain_pitch * 1000;
+  else if (telemetry_loop_counter == 30) telemetry_data = pid_d_gain_pitch * 10;
+
+  else if (telemetry_loop_counter == 31) telemetry_data = pid_p_gain_yaw * 10;
+  else if (telemetry_loop_counter == 32) telemetry_data = pid_i_gain_yaw * 1000;
+  else if (telemetry_loop_counter == 33) telemetry_data = pid_d_gain_yaw * 10;
+
   //After 125 loops the telemetry_loop_counter variable is reset. This way the telemetry data is send every half second.
   if (telemetry_loop_counter == 100) telemetry_loop_counter = 0;
 
-  if (telemetry_loop_counter < 25) {
+  if (telemetry_loop_counter < 34) {
 #ifndef DEBUG_TELEMETRY
     Serial.println((String) telemetry_loop_counter + ": " + (String) telemetry_data);
 #endif
     check_byte ^= telemetry_data;
 
     radio.write(&telemetry_data, sizeof(telemetry_data));
-  } else if (telemetry_loop_counter == 25) {
+  } else if (telemetry_loop_counter == 34) {
 #ifndef DEBUG_TELEMETRY
     Serial.println("Check: " + (String) check_byte);
 #endif

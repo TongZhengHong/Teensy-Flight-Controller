@@ -1,3 +1,11 @@
+//* /////////////////////////////////////////////////////////////////////////////////////////////
+//*Convention:
+//*  Channel 1: ROLL
+//*  Channel 2: PITCH
+//*  Channel 3: THROTTLE
+//*  Channel 4: YAW
+//* /////////////////////////////////////////////////////////////////////////////////////////////
+
 volatile uint16_t receiver_input[7];
 uint8_t last_channel_1, last_channel_2, last_channel_3, last_channel_4, last_channel_5, last_channel_6;
 uint32_t timer_1, timer_2, timer_3, timer_4, timer_5, timer_6, current_time;
@@ -7,6 +15,9 @@ void convert_transmitter_values() {
   receiver_input_channel_2 = convert_receiver_channel(2); //Convert the actual receiver signals for roll to the standard 1000 - 2000us.
   receiver_input_channel_3 = convert_receiver_channel(3); //Convert the actual receiver signals for throttle to the standard 1000 - 2000us.
   receiver_input_channel_4 = convert_receiver_channel(4); //Convert the actual receiver signals for yaw to the standard 1000 - 2000us
+
+  receiver_input_channel_5 = receiver_input[5];
+  receiver_input_channel_6 = receiver_input[6];
 
 #ifndef DEBUG_TRANSMITTER
   Serial.print(receiver_input_channel_1);
@@ -32,13 +43,13 @@ int convert_receiver_channel(byte function) {
   if (actual < center)  { //The actual receiver value is lower than the center value
     if (actual < low)
       actual = low;                                                      //Limit the lowest value to the value that was detected during setup
-    difference = ((long)(center - actual) * (long)500) / (center - low); //Calculate and scale the actual value to a 1000 - 2000us value
+    difference = ((long)(center - actual) * (long) 500) / (center - low); //Calculate and scale the actual value to a 1000 - 2000us value
     return 1500 - difference;
   }
   else if (actual > center)  { //The actual receiver value is higher than the center value
     if (actual > high)
       actual = high;                                                      //Limit the lowest value to the value that was detected during setup
-    difference = ((long)(actual - center) * (long)500) / (high - center); //Calculate and scale the actual value to a 1000 - 2000us value
+    difference = ((long)(actual - center) * (long) 500) / (high - center); //Calculate and scale the actual value to a 1000 - 2000us value
     return 1500 + difference;
   }
   else
@@ -48,7 +59,7 @@ int convert_receiver_channel(byte function) {
 void receiver_change() {
   current_time = micros();
   //* ========================================= Channel 1 =========================================
-  if (GPIOD_PDIR & 2) { //0000 0000 0000 0000 0000 0000 0000 0010 --> PTD1
+  if (GPIOD_PDIR & 2) { //0000 0000 0000 0000 0000 0000 0000 0010 --> PTD1  //Check if the port equals 2
     if (last_channel_1 == 0) {                                              //Input 14 changed from 0 to 1.
       last_channel_1 = 1;                                                   //Remember current input state.
       timer_1 = current_time;                                               //Set timer_1 to current_time.

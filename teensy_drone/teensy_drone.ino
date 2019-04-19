@@ -1,3 +1,4 @@
+#include <SD.h>
 #include <SPI.h>
 #include <Wire.h>
 #include <EEPROM.h>
@@ -8,7 +9,10 @@
 //#define QUADCOPTER
 #define HEXCOPTER
 
+//#define ANGLE_MODE
 //#define HEADING_HOLD_MODE
+#define TUNING_MODE             //This is check for changes to VR tuner and 3 way switch to update PID gains
+//#define DEBUG_PID
 
 #define X_FLIP
 #define Y_FLIP
@@ -20,7 +24,7 @@
 #define DEBUG_BARO
 #define DEBUG_GPS
 #define DEBUG_BATTERY
-//#define DEBUG_TELEMETRY
+#define DEBUG_TELEMETRY
 
 #define DEBUG_START
 #define DEBUG_LOOP_TIME
@@ -37,12 +41,13 @@
 
 #define CE_PIN 9
 #define CSN_PIN 10
+#define RADIO_CHANNEL 100
 #define LOOP_TIME 4000
 
 //* /////////////////////////////////////////////////////////////////////////////////////////////
-float pid_p_gain_roll = 0.4;                    //Gain setting for the roll P-controller
-float pid_i_gain_roll = 0.005;                   //Gain setting for the roll I-controller
-float pid_d_gain_roll = 0.5;                    //Gain setting for the roll D-controller
+float pid_p_gain_roll = 0.7;                    //Gain setting for the roll P-controller
+float pid_i_gain_roll = 0.001;                   //Gain setting for the roll I-controller
+float pid_d_gain_roll = 0.8;                    //Gain setting for the roll D-controller
 uint16_t pid_max_roll = 350;                    //Maximum output of the PID-controller (+/-)
 uint16_t pid_max_i_roll = 100;                  //Eliminate I controller windup
 
@@ -55,18 +60,17 @@ uint16_t pid_max_i_pitch = pid_max_i_roll;      //Eliminate I controller windup
 #endif
 
 #ifdef HEXCOPTER
-float pid_p_gain_pitch = pid_p_gain_roll;       //Gain setting for the pitch P-controller.
-float pid_i_gain_pitch = pid_i_gain_roll;       //Gain setting for the pitch I-controller.
-float pid_d_gain_pitch = pid_d_gain_roll;       //Gain setting for the pitch D-controller.
+float pid_p_gain_pitch = 0.7;       //Gain setting for the pitch P-controller.
+float pid_i_gain_pitch = 0.001;       //Gain setting for the pitch I-controller.
+float pid_d_gain_pitch = 0.8;       //Gain setting for the pitch D-controller.
 uint16_t pid_max_pitch = pid_max_roll;          //Maximum output of the PID-controller (+/-)
 uint16_t pid_max_i_pitch = pid_max_i_roll;      //Eliminate I controller windup
 #endif
 
-float pid_p_gain_yaw = 0.7;                     //Gain setting for the pitch P-controller. //4.0
+float pid_p_gain_yaw = 1.5;                     //Gain setting for the pitch P-controller. //4.0
 float pid_i_gain_yaw = 0.0;                     //Gain setting for the pitch I-controller. //0.02
-float pid_d_gain_yaw = 0.0;                     //Gain setting for the pitch D-controller.
+float pid_d_gain_yaw = 0.2;                     //Gain setting for the pitch D-controller.
 uint16_t pid_max_yaw = 400;                     //Maximum output of the PID-controller (+/-)
-float heading_hold_gain = 3.0;
 //* /////////////////////////////////////////////////////////////////////////////////////////////
 
 //Misc. variables
@@ -74,6 +78,7 @@ uint8_t start;
 float voltage;
 uint32_t difference, main_loop_timer;
 byte eeprom_data[75];
+uint8_t temp_mode = 1, prev_mode = 1, axis_mode = 0;
 
 //Battery variables
 uint16_t battery_voltage;
@@ -116,7 +121,6 @@ float mag_x_offset, mag_y_offset, mag_z_offset;
 float mag_x_scale, mag_y_scale, mag_z_scale;
 
 float prev_heading, heading;
-bool heading_hold = false;
 
 //PID variables
 float pid_error_temp;
@@ -236,6 +240,10 @@ void setup() {
   Serial.println("Setup DONE!");
 }
 
+///////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////// MAIN LOOP ////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////
+
 void loop() {
   convert_transmitter_values();
 
@@ -249,9 +257,15 @@ void loop() {
 
   //readGPS();
 
+#ifndef ANGLE_MODE
   set_pid_offsets();
-
   calculate_pid();
+#endif
+
+#ifdef ANGLE_MODE
+  set_pid_offsets_angles();
+  calculate_pid_angles();
+#endif
 
   calculate_esc_output();
 
@@ -260,10 +274,40 @@ void loop() {
   calculate_battery();
 
 //  test_telemetry();
-  send_telemetry_data();
+//  send_telemetry_data();
+
+#ifdef TUNING_MODE
+  tune_PID_gains();
+#endif
+
+#ifdef DEBUG_PID
+  Serial.print(pid_p_gain_roll);
+  Serial.print(", ");
+  Serial.print(pid_i_gain_roll);
+  Serial.print(", ");
+  Serial.print(pid_d_gain_roll);
+  Serial.print(", ");
+
+  Serial.print(pid_p_gain_pitch);
+  Serial.print(", ");
+  Serial.print(pid_i_gain_pitch);
+  Serial.print(", ");
+  Serial.print(pid_d_gain_pitch);
+  Serial.print(", ");
+
+  Serial.print(pid_p_gain_yaw);
+  Serial.print(", ");
+  Serial.print(pid_i_gain_yaw);
+  Serial.print(", ");
+  Serial.println(pid_d_gain_yaw);
+#endif
 
   maintain_loop_time();
 }
+
+///////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////// MAIN LOOP ////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////
 
 void check_start_stop() {
 #ifndef DEBUG_START
@@ -312,13 +356,13 @@ void calculate_battery() {
   int sensor_value = analogRead(A14);
   float analog_voltage = sensor_value * (3.3 / 1024);
 
-//  battery_sum += analog_voltage;
-//  battery_sum -= battery_mem[battery_counter];
-//  battery_mem[battery_counter] = analog_voltage;
-//  float voltage = battery_sum / 32.0;
-//
-//  if (battery_counter == 31) battery_counter = 0;
-//  else battery_counter++;
+  //  battery_sum += analog_voltage;
+  //  battery_sum -= battery_mem[battery_counter];
+  //  battery_mem[battery_counter] = analog_voltage;
+  //  float voltage = battery_sum / 32.0;
+  //
+  //  if (battery_counter == 31) battery_counter = 0;
+  //  else battery_counter++;
 
   voltage = 1.3452 * voltage - 0.2569;
   float battery = 100 * ((voltage * potDivider) + diodeForward + calculation_error);
@@ -349,4 +393,93 @@ void maintain_loop_time () {
   }
 
   main_loop_timer = micros();
+}
+
+void tune_PID_gains() {
+  //receiver_input_channel_5 == Turning knob
+  //receiver_input_channel_6 == 3 way switch
+  uint8_t gain_mode = 1;                             //Set mode to default CENTER => I gain
+  if (receiver_input_channel_5 > 1700) gain_mode = 2;       //Set mode to RIGHT => D gain
+  else if (receiver_input_channel_5 < 1300) gain_mode = 0;  //Set mode to LEFT => P gain
+
+  uint8_t incr_mode = 1;                             //Set mode to center
+  if (receiver_input_channel_6 > 1700) incr_mode = 2;       //Set mode to UP => Increase
+  else if (receiver_input_channel_6 < 1300) incr_mode = 0;  //Set mode to DOWN => Decrease
+
+  if (receiver_input_channel_3 < 1050 && receiver_input_channel_4 > 1950 && receiver_input_channel_1 < 1050 && receiver_input_channel_2 < 1050)  {
+    if (axis_mode == 0) axis_mode = 1;
+    else if (axis_mode == 2) axis_mode = 3;
+    else if (axis_mode == 4) axis_mode = 5;
+  }
+
+  //When yaw stick is back in the center position start the motors (step 2).
+  if (receiver_input_channel_4 < 1550 && receiver_input_channel_1 > 1450 && receiver_input_channel_2 > 1450)  {
+    if (axis_mode == 1) axis_mode = 2;
+    else if (axis_mode == 3) axis_mode = 4;
+    else if (axis_mode == 5) axis_mode = 0;
+  }
+
+  if (incr_mode == 2 && prev_mode == 1) temp_mode = 2;          //From center to UP
+  else if (incr_mode == 0 && prev_mode == 1) temp_mode = 0;     //From center to DOWN
+  else if (incr_mode == 1) {
+    if (prev_mode == 2 && temp_mode == 2) {                     //Increment!
+      Serial.println("Increment!");
+      if (axis_mode == 0) {
+        if (gain_mode == 0) pid_p_gain_roll += 0.1;
+        else if (gain_mode == 1) pid_i_gain_roll += 0.001;
+        else if (gain_mode == 2) pid_d_gain_roll += 0.1;
+        
+      } else if (axis_mode == 2) {
+        if (gain_mode == 0) pid_p_gain_pitch += 0.1;
+        else if (gain_mode == 1) pid_i_gain_pitch += 0.001;
+        else if (gain_mode == 2) pid_d_gain_pitch += 0.1;
+        
+      } else if (axis_mode == 4) {
+        if (gain_mode == 0) pid_p_gain_yaw += 0.1;
+        else if (gain_mode == 1) pid_i_gain_yaw += 0.001;
+        else if (gain_mode == 2) pid_d_gain_yaw += 0.1;
+      }
+    } else if (prev_mode == 0 && temp_mode == 0) {              //Decrement!
+      Serial.println("Decrement!");
+      if (axis_mode == 0) {
+        if (gain_mode == 0) pid_p_gain_roll -= 0.1;
+        else if (gain_mode == 1) pid_i_gain_roll -= 0.001;
+        else if (gain_mode == 2) pid_d_gain_roll -= 0.1;
+        
+      } else if (axis_mode == 2) {
+        if (gain_mode == 0) pid_p_gain_pitch -= 0.1;
+        else if (gain_mode == 1) pid_i_gain_pitch -= 0.001;
+        else if (gain_mode == 2) pid_d_gain_pitch -= 0.1;
+        
+      } else if (axis_mode == 4) {
+        if (gain_mode == 0) pid_p_gain_yaw -= 0.1;
+        else if (gain_mode == 1) pid_i_gain_yaw -= 0.001;
+        else if (gain_mode == 2) pid_d_gain_yaw -= 0.1;
+      }
+    }
+    temp_mode = 1;
+  }
+
+  prev_mode = incr_mode;
+
+/*
+  Serial.print(pid_p_gain_roll);
+  Serial.print(", ");
+  Serial.print(pid_i_gain_roll, 3);
+  Serial.print(", ");
+  Serial.print(pid_d_gain_roll);
+  Serial.print(", ");
+
+  Serial.print(pid_p_gain_pitch);
+  Serial.print(", ");
+  Serial.print(pid_i_gain_pitch, 3);
+  Serial.print(", ");
+  Serial.print(pid_d_gain_pitch);
+  Serial.print(", ");
+
+  Serial.print(pid_p_gain_yaw);
+  Serial.print(", ");
+  Serial.print(pid_i_gain_yaw, 3);
+  Serial.print(", ");
+  Serial.println(pid_d_gain_yaw);*/
 }
